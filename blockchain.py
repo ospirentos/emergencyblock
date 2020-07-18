@@ -13,6 +13,7 @@ class Blockchain:
         self.chain = []
         self.current_events = []
         self.nodes = set()
+        self.u_txs = []
 
         self.new_block(previous_hash=1, proof=100)
 
@@ -70,6 +71,7 @@ class Blockchain:
             'index': len(self.chain) + 1,
             'timestamp': time(),
             'events': self.current_events,
+            'u_txs': self.u_txs,
             'proof': proof,
             'previous_hash': previous_hash or self.hash(self.chain[-1])
         }
@@ -78,6 +80,7 @@ class Blockchain:
         print("Size of an block object is ", sys.getsizeof(block))
 
         self.current_events = []
+        self.u_txs = []
 
         self.chain.append(block)
         
@@ -121,6 +124,28 @@ class Blockchain:
         guess = f'{last_proof}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:6] == "000000"
+#---------------------Smart Contracts---------------------#
+
+    def add_authority(self, pub_key):
+        self.u_txs.append({
+            "pub_key_sender": "EmergencyBlock",
+            "pub_key_reciever": pub_key,
+            "trust_point": 999999
+        })
+        return 1
+
+    def authorize_node(self, official_pub_key, auth_node_public_key):
+        for block in self.chain:
+            for tx in block["u_txs"]:
+                if tx["priv_key"] == official_priv_key:
+                    self.u_txs.append({
+                        "pub_key_sender": official_pub_key,
+                        "pub_key_reciever": auth_node_public_key,
+                        "trust_point": 10
+                    })
+        return 0
+
+
 
 #---------------------------API---------------------------#
 
@@ -203,11 +228,33 @@ def consensus():
         }
     else:
         response = {
-            'message': 'Out chain is authoritative',
+            'message': 'Our chain is authoritative',
             'chain': blockchain.chain
         }
     
     return jsonify(response), 200
+
+@app.route('/smartcontract/addauthority', methods=['POST'])
+def add_newauthority():
+    values = request.get_json()
+
+    required = ['pub_key']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+    blockchain.add_authority(values['pub_key'])
+    response = {'message': f'New official authority will be added to next Block'}
+    return jsonify(response), 201
+
+@app.route('/smartcontract/authanode', methods=['POST'])
+def authanode():
+    values = request.get_json()
+
+    required = ['pub_key_official', 'pub_key_node']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+    blockchain.authorize_node(values['pub_key_official'], values['pub_key_node'])
+    response = {'message': f'Authorization is submitted'}
+    return jsonify(response), 201
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
